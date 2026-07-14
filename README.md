@@ -1,4 +1,4 @@
-# Sift — EGFR bioactivity screening (v0.1)
+# Sift — EGFR bioactivity screening + docking (v0.2)
 
 ## What this is
 
@@ -25,10 +25,17 @@ python predict.py "CC(=O)Oc1ccccc1C(=O)O"
 ## Roadmap
 
 - [x] v0.1 — Bioactivity screening model, validated against approved drugs
-- [ ] v0.2 — Structural docking validation (AutoDock Vina against EGFR's binding pocket)
+- [x] v0.2 — Structural docking validation (AutoDock Vina against EGFR's binding pocket)
 - [ ] v0.3 — LLM-based literature mining (PubMed context + known-ligand extraction)
 - [ ] v1.0 — Combined into a single tool with a simple interface
 
-## What I learned / open questions
+## What I learned / open questions (log)
 
-Building this made the "structure-activity relationship" idea; a phrase I'd only seen in lectures actually click: seeing the model rediscover real drugs like lapatinib and erlotinib purely from fingerprint patterns, without ever being told which drugs they were, made it obvious why so much of drug discovery now leans on machine learning rather than blind lab testing. It also raised a question I want to dig into more: how much of the model's success is genuine chemistry versus it just picking up on the kind of molecule ChEMBL happens to have lots of data for. Going forward, I'm curious to see whether adding structural docking changes which candidates look promising, and I'd like to make the tool itself more usable one example for instance, adding a name-to-SMILES translator so it doesn't assume the user already has a molecule's SMILES string on hand.
+**v0.1 — Bioactivity screening**
+- Seeing the model rediscover real drugs (lapatinib, erlotinib) purely from fingerprint patterns made the textbook idea of "structure-activity relationship" click for the first time
+- Open question: how much of the model's success is genuine chemistry versus it picking up on the kind of molecule ChEMBL happens to have lots of data for
+
+**v0.2 — Structural docking**
+- Docking made the screening model's predictions feel less abstract — going from "the model thinks this looks similar to known drugs" to "here's how it would physically sit in the actual binding pocket"
+- Real-world data is messy: salt forms (e.g. lapatinib ditosylate) needed extra handling before docking would work at all — a good reminder that public datasets need cleaning even when they're already curated
+- Open question: how sensitive are the docking scores to the exact box size/position I chose, and would a different validated pocket definition change the ranking of candidates
