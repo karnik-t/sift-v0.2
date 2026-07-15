@@ -1,0 +1,79 @@
+{
+  "target": "EGFR",
+  "num_abstracts": 5,
+  "drugs": [
+    "Cetuximab",
+    "panitumumab"
+  ],
+  "endogenous_ligands": [
+    "EGF",
+    "epigen",
+    "epiregulin"
+  ],
+  "contexts": [
+    "The abstract discusses the EGFR signaling pathway, its interaction with the ligand EGF, and the ongoing development of inhibitors for cancer treatment.",
+    "The abstract reviews the canonical and emerging noncanonical functions of the EGFR in physiological processes and its role as a driver of tumorigenesis in various cancers.",
+    "The abstract discusses the history and methodologies of covalent drug discovery, specifically mentioning the development of covalent inhibitors for targets such as EGFR and BTK.",
+    "The abstract reviews the mechanisms of resistance to anti-EGFR monoclonal antibodies, such as cetuximab and panitumumab, in metastatic colorectal cancer and explores strategies to overcome this resistance.",
+    "The study characterizes how different endogenous ligands like epiregulin and epigen induce varied EGFR dimerization strengths and signaling dynamics to drive distinct cellular responses."
+  ],
+  "per_abstract": [
+    {
+      "pmid": "32124699",
+      "title": "Review on Epidermal Growth Factor Receptor (EGFR) Structure, Signaling Pathways, Interactions, and Recent Updates of EGFR Inhibitors.",
+      "ligands": [
+        {
+          "name": "EGF",
+          "type": "endogenous"
+        }
+      ],
+      "context": "The abstract discusses the EGFR signaling pathway, its interaction with the ligand EGF, and the ongoing development of inhibitors for cancer treatment."
+    },
+    {
+      "pmid": "29124875",
+      "title": "Emerging functions of the EGFR in cancer.",
+      "ligands": [],
+      "context": "The abstract reviews the canonical and emerging noncanonical functions of the EGFR in physiological processes and its role as a driver of tumorigenesis in various cancers."
+    },
+    {
+      "pmid": "36008483",
+      "title": "Advances in covalent drug discovery.",
+      "ligands": [],
+      "context": "The abstract discusses the history and methodologies of covalent drug discovery, specifically mentioning the development of covalent inhibitors for targets such as EGFR and BTK."
+    },
+    {
+      "pmid": "34663410",
+      "title": "Resistance to anti-EGFR therapies in metastatic colorectal cancer: underlying mechanisms and reversal strategies.",
+      "ligands": [
+        {
+          "name": "Cetuximab",
+          "type": "drug"
+        },
+        {
+          "name": "panitumumab",
+          "type": "drug"
+        }
+      ],
+      "context": "The abstract reviews the mechanisms of resistance to anti-EGFR monoclonal antibodies, such as cetuximab and panitumumab, in metastatic colorectal cancer and explores strategies to overcome this resistance."
+    },
+    {
+      "pmid": "28988771",
+      "title": "EGFR Ligands Differentially Stabilize Receptor Dimers to Specify Signaling Kinetics.",
+      "ligands": [
+        {
+          "name": "epiregulin",
+          "type": "endogenous"
+        },
+        {
+          "name": "epigen",
+          "type": "endogenous"
+        },
+        {
+          "name": "EGF",
+          "type": "endogenous"
+        }
+      ],
+      "context": "The study characterizes how different endogenous ligands like epiregulin and epigen induce varied EGFR dimerization strengths and signaling dynamics to drive distinct cellular responses."
+    }
+  ]
+}
