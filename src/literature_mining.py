@@ -2,9 +2,17 @@
 Literature mining for Sift: pull PubMed abstracts for a target, then use
 Gemini to extract known ligands (drugs vs endogenous) and disease context.
 Results are cached to data/literature/{target}_literature.json.
+
+Optimizations:
+- All abstracts for a target are sent to Gemini in a single batched request
+  (instead of one request per abstract), to conserve free-tier daily quota.
+- Gemini calls are wrapped with a small manual retry/backoff for transient
+  network or server errors (503s, dropped connections), on top of the
+  google-genai client's own internal retries.
 """
 import os
 import json
+import time
 import requests
 
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -79,31 +87,106 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
-def extract_ligands_from_abstract(client, target_name, abstract_text):
+def _generate_with_retry(client, model, prompt, max_attempts=3, base_delay=5):
     """
-    Ask Gemini to extract known ligands from a single PubMed abstract,
-    tagging each as a therapeutic drug/inhibitor or a natural (endogenous)
-    ligand, plus a one-sentence disease/context blurb.
+    Call Gemini with a small manual retry/backoff, on top of whatever
+    retries the google-genai client already does internally. Handles
+    transient issues (503 high demand, dropped connections) that the
+    free tier is prone to.
     """
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return client.models.generate_content(model=model, contents=prompt)
+        except Exception as e:
+            last_error = e
+            if attempt < max_attempts:
+                delay = base_delay * attempt
+                print(f"Gemini call failed (attempt {attempt}/{max_attempts}): {e}")
+                print(f"Retrying in {delay}s...")
+                time.sleep(delay)
+    raise last_error
+
+
+# Tried in order. Flash-Lite variants have a much larger free-tier daily
+# quota than the preview model we were on. A model-not-found error (the
+# model doesn't exist / isn't available yet) is instant and costs no
+# quota, so falling through the list is safe. A quota (429) or transient
+# (503) error on a real model is NOT a reason to fall through -- that
+# model is fine, we're just rate-limited on it right now.
+MODEL_CANDIDATES = ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview"]
+
+
+def _is_model_missing_error(e):
+    msg = str(e)
+    return "NOT_FOUND" in msg or "not found" in msg.lower() or "no longer available" in msg.lower()
+
+
+def _generate_with_model_fallback(client, prompt, max_attempts=3, base_delay=5):
+    last_error = None
+    for model in MODEL_CANDIDATES:
+        try:
+            # Probe with a single attempt first (no retry delay) so a
+            # permanently-dead model name fails in ~1 call, not after
+            # 3 retries with growing backoff. Retries only make sense
+            # for transient errors (503, dropped connections), and a
+            # 404 model-not-found will never succeed on retry anyway.
+            return _generate_with_retry(client, model, prompt, max_attempts=1)
+        except Exception as e:
+            if _is_model_missing_error(e):
+                print(f"Model '{model}' unavailable, trying next candidate...")
+                last_error = e
+                continue
+            # Real (likely transient) error on a model that DOES exist --
+            # now it's worth the full retry/backoff treatment.
+            try:
+                return _generate_with_retry(client, model, prompt, max_attempts=max_attempts, base_delay=base_delay)
+            except Exception as e2:
+                last_error = e2
+                if _is_model_missing_error(e2):
+                    continue
+                raise
+    raise last_error
+
+
+def extract_batch(client, target_name, abstracts):
+    """
+    Send ALL abstracts for a target to Gemini in a single request, asking
+    for a JSON array of results (one per abstract, in order). This is the
+    main quota-saving optimization: mining N abstracts costs 1 API call
+    instead of N.
+
+    Returns a list of dicts, one per abstract:
+        {"ligands": [{"name": ..., "type": "drug"|"endogenous"}], "context": "..."}
+    """
+    if not abstracts:
+        return []
+
+    numbered = "\n\n".join(
+        f"Abstract {i + 1}:\n\"\"\"{a['abstract']}\"\"\""
+        for i, a in enumerate(abstracts)
+    )
+
     prompt = (
-        "You are extracting structured data from a scientific abstract about "
-        f'the protein target "{target_name}".\n\n'
-        f'Abstract:\n"""{abstract_text}"""\n\n'
-        "Return ONLY valid JSON, no markdown fences, no preamble, in exactly this shape:\n"
+        "You are extracting structured data from multiple scientific abstracts, "
+        f'all about the protein target "{target_name}".\n\n'
+        f"{numbered}\n\n"
+        "Return ONLY valid JSON, no markdown fences, no preamble: a JSON array "
+        f"with EXACTLY {len(abstracts)} objects, one per abstract above, in the "
+        "same order. Each object must look exactly like this:\n"
         '{"ligands": [{"name": "...", "type": "drug"}], "context": "one sentence"}\n\n'
         "Rules:\n"
         '- Each ligand needs a "type" of either "drug" (a synthetic or therapeutic '
         'compound/inhibitor/antibody used or developed as medicine) or "endogenous" '
         "(the target's natural biological binding partner, e.g. a growth factor or hormone).\n"
         '- Do not include the target protein itself as a ligand.\n'
-        '- If no specific named ligands are mentioned, return an empty list.\n'
-        '- Keep "context" to one concise sentence.\n'
+        '- If an abstract names no specific ligands, use an empty list for that abstract.\n'
+        '- Keep each "context" to one concise sentence.\n'
+        f"- The output array must have exactly {len(abstracts)} elements, matching "
+        "the abstracts in order. Do not skip or merge any.\n"
     )
 
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        contents=prompt,
-    )
+    response = _generate_with_model_fallback(client, prompt)
 
     text = response.text.strip()
     if text.startswith("```"):
@@ -113,26 +196,37 @@ def extract_ligands_from_abstract(client, target_name, abstract_text):
         text = text.strip()
 
     try:
-        return json.loads(text)
+        results = json.loads(text)
     except json.JSONDecodeError:
-        return {"ligands": [], "context": "", "_raw_error": text}
+        results = []
+
+    # Defensive: pad or trim to match the number of abstracts, so downstream
+    # code can always zip abstracts 1:1 with results.
+    if len(results) < len(abstracts):
+        results += [{"ligands": [], "context": ""}] * (len(abstracts) - len(results))
+    elif len(results) > len(abstracts):
+        results = results[:len(abstracts)]
+
+    return results
 
 
 def mine_literature(target_name, max_abstracts=10, ncbi_api_key=None):
     """
     Full literature mining pipeline for a target: fetch abstracts, extract
-    ligands + context from each via Gemini, aggregate into one result.
+    ligands + context for all of them in a single batched Gemini call,
+    aggregate into one result.
     """
     client = get_gemini_client()
     abstracts = fetch_pubmed_abstracts(target_name, max_results=max_abstracts, api_key=ncbi_api_key)
+
+    extracted_list = extract_batch(client, target_name, abstracts)
 
     drugs = set()
     endogenous = set()
     contexts = []
     per_abstract_results = []
 
-    for a in abstracts:
-        extracted = extract_ligands_from_abstract(client, target_name, a["abstract"])
+    for a, extracted in zip(abstracts, extracted_list):
         per_abstract_results.append({
             "pmid": a["pmid"],
             "title": a["title"],

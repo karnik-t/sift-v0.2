@@ -9,3 +9,15 @@ vina
 !receptor.pdbqt
 !ligand.pdbqt
 !redocked_erlotinib.pdbqt
+
+# Generated data (models, structures, cache, literature mining results) --
+# these are all reproducible outputs a fresh clone regenerates on demand
+# via the app itself, not source to track.
+data/models/
+data/structures/
+data/literature/
+data/docking_cache.json
+
+# macOS
+.DS_Store
+**/.DS_Store
