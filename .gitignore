@@ -13,9 +13,12 @@ vina
 # Generated data (models, structures, cache, literature mining results) --
 # these are all reproducible outputs a fresh clone regenerates on demand
 # via the app itself, not source to track.
-data/models/
-data/structures/
-data/literature/
+data/models/*
+!data/models/.gitkeep
+data/structures/*
+!data/structures/.gitkeep
+data/literature/*
+!data/literature/.gitkeep
 data/docking_cache.json
 
 # macOS
